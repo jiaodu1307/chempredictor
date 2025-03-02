@@ -1,0 +1,55 @@
+pipeline:
+  steps:
+    - data_loading:
+        file_type: csv
+        target_column: Yield
+        feature_columns: [Reactant, Solvent, Temperature]
+        missing_value_strategy: mean
+    
+    - feature_encoding:
+        Reactant: 
+          encoder: morgan_fingerprint
+          params:
+            radius: 2
+            n_bits: 2048
+            chiral: true
+        Solvent:
+          encoder: onehot_encoder
+          params:
+            handle_unknown: ignore
+        Temperature:
+          encoder: standard_scaler
+          params:
+            with_mean: true
+            with_std: true
+    
+    - model_training:
+        type: xgboost
+        task_type: regression  # 或 classification
+        params:
+          n_estimators: 100
+          max_depth: 6
+          learning_rate: 0.1
+          objective: reg:squarederror
+        cv:
+          method: kfold
+          n_splits: 5
+          shuffle: true
+          random_state: 42
+    
+    - evaluation:
+        metrics: 
+          regression: [rmse, r2, mae]
+          classification: [accuracy, f1, roc_auc]
+        feature_importance: true
+        shap_analysis: true
+        
+logging:
+  level: INFO
+  file: logs/chempredictor.log
+
+output:
+  save_model: true
+  model_path: models/
+  predictions_path: results/
+  report_format: json 

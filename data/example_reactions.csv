@@ -1,0 +1,11 @@
+Reactant,Solvent,Temperature,Yield
+CCO,Water,100,82.3
+C1=CC=CC=C1,Ethanol,80,75.6
+CC(=O)O,Methanol,90,68.9
+CCC(=O)CC,Acetone,60,45.2
+CN1C=NC2=C1C(=O)N(C)C(=O)N2C,DMSO,120,91.5
+CC1=CC=C(C=C1)C(=O)O,THF,75,63.8
+C1=CC=C(C=C1)C(=O)Cl,Toluene,110,88.7
+CC(C)CO,Chloroform,50,32.1
+C1CCCCC1,Hexane,65,41.3
+C1=CC=C2C(=C1)C=CC=C2,Benzene,95,79.4 
