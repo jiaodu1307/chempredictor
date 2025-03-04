@@ -1,5 +1,5 @@
 """
-模型模块 - 提供各种预测模型
+模型模块 - 提供各种机器学习模型
 """
 
 from chempredictor.models.base import (
@@ -13,7 +13,8 @@ from chempredictor.models.base import (
 from chempredictor.models.traditional import (
     RandomForestModel,
     XGBoostModel,
-    LightGBMModel
+    LightGBMModel,
+    MLPModel
 )
 
 __all__ = [
@@ -23,5 +24,6 @@ __all__ = [
     "MODEL_REGISTRY",
     "RandomForestModel",
     "XGBoostModel",
-    "LightGBMModel"
+    "LightGBMModel",
+    "MLPModel"
 ] 

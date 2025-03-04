@@ -15,6 +15,26 @@ class DataLoader:
     支持从CSV、Excel、JSON等格式加载数据
     """
     
+    @staticmethod
+    def _fill_mean(df: pd.DataFrame, col: str) -> pd.Series:
+        """使用均值填充缺失值"""
+        return df[col].fillna(df[col].mean())
+    
+    @staticmethod
+    def _fill_median(df: pd.DataFrame, col: str) -> pd.Series:
+        """使用中位数填充缺失值"""
+        return df[col].fillna(df[col].median())
+    
+    @staticmethod
+    def _fill_mode(df: pd.DataFrame, col: str) -> pd.Series:
+        """使用众数填充缺失值"""
+        return df[col].fillna(df[col].mode()[0])
+    
+    @staticmethod
+    def _drop_na(df: pd.DataFrame, col: str) -> pd.DataFrame:
+        """删除包含缺失值的行"""
+        return df.dropna(subset=[col])
+    
     def __init__(self, file_type: Optional[str] = None, 
                  target_column: Optional[str] = None,
                  feature_columns: Optional[List[str]] = None,
@@ -39,10 +59,10 @@ class DataLoader:
         
         # 缺失值处理函数映射
         self.missing_value_handlers = {
-            "mean": lambda df, col: df[col].fillna(df[col].mean()),
-            "median": lambda df, col: df[col].fillna(df[col].median()),
-            "mode": lambda df, col: df[col].fillna(df[col].mode()[0]),
-            "drop": lambda df, col: df.dropna(subset=[col])
+            "mean": self._fill_mean,
+            "median": self._fill_median,
+            "mode": self._fill_mode,
+            "drop": self._drop_na
         }
         
         if missing_value_strategy not in self.missing_value_handlers:
