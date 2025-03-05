@@ -116,8 +116,10 @@ events.out.tfevents.*
 hparams.yaml
 checkpoints/
 
-# 数据集
+# 文件夹
 data/
+logs/
+models/
 
 # cursor
 .cursorignore

@@ -349,7 +349,7 @@ class LightGBMModel(BaseModel):
 class MLPModel(BaseModel):
     """MLP模型包装类"""
     
-    def __init__(self, task_type: str = "regression", device: str = "cpu", **kwargs):
+    def __init__(self, task_type: str = "regression", device: str = "cuda", **kwargs):
         """
         初始化MLP模型
         
@@ -377,6 +377,12 @@ class MLPModel(BaseModel):
             ],
             'enable_progress_bar': kwargs.get('verbose', True)
         }
+    
+    @staticmethod
+    def worker_init_fn(worker_id: int) -> None:
+        """为DataLoader的每个worker设置随机种子"""
+        seed = torch.initial_seed() + worker_id
+        torch.manual_seed(seed)
         
     def fit(self, X: np.ndarray, y: np.ndarray):
         """训练模型"""
@@ -393,21 +399,32 @@ class MLPModel(BaseModel):
         # 创建数据集
         dataset = torch.utils.data.TensorDataset(X, y)
         
+        # 设置随机数种子
+        generator = torch.Generator()
+        generator.manual_seed(self.model_kwargs.get('random_state', 42))
+        
         # 划分训练集和验证集
         val_size = int(len(dataset) * self.model_kwargs.get('validation_fraction', 0.1))
         train_size = len(dataset) - val_size
-        train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+        train_dataset, val_dataset = torch.utils.data.random_split(
+            dataset, 
+            [train_size, val_size],
+            generator=generator
+        )
         
         # 创建数据加载器
         train_loader = torch.utils.data.DataLoader(
             train_dataset,
             batch_size=self.model_kwargs.get('batch_size', 32),
             shuffle=True,
-            num_workers=0  # 避免多进程问题
+            num_workers=0,  # 避免多进程问题
+            generator=generator,  # 添加随机数生成器
+            worker_init_fn=self.worker_init_fn  # 使用类方法替代lambda函数
         )
         val_loader = torch.utils.data.DataLoader(
             val_dataset,
             batch_size=self.model_kwargs.get('batch_size', 32),
+            shuffle=False,  # 验证集不需要打乱
             num_workers=0  # 避免多进程问题
         )
         
@@ -441,6 +458,9 @@ class MLPModel(BaseModel):
         
         # 设置为评估模式
         self.model.eval()
+        
+        # 确保模型和数据在同一个设备上
+        self.model = self.model.to(self.device)
         
         # 预测
         with torch.no_grad():

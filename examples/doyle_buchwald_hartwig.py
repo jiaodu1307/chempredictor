@@ -71,18 +71,18 @@ def create_config():
                 "model_training": {
                     "type": "mlp",
                     "task_type": "regression",
-                    "device": "auto",  # 可选值: "auto", "cpu", "cuda"
+                    "device": "cuda",  # 可选值: "auto", "cpu", "cuda"
                     "params": {
                         # PyTorch Lightning MLP参数
-                        "hidden_layer_sizes": [2048, 1024, 512, 256],
+                        "hidden_layer_sizes": [256],
                         "activation": "relu",
                         "learning_rate": 0.001,  # 对应LightningMLP中的learning_rate参数
                         "weight_decay": 0.0001,  # 对应LightningMLP中的weight_decay参数
                         "batch_size": 32,
-                        "max_epochs": 100,  # 改为max_epochs以匹配PyTorch Lightning
+                        "max_epochs": 40,  # 改为max_epochs以匹配PyTorch Lightning
                         "validation_fraction": 0.1,
                         "patience": 10,  # 改为patience以匹配EarlyStopping回调
-                        "random_state": 42,
+                        "random_state": 2,
                         "verbose": True,
                         
                         # 优化器和学习率调度器的额外参数
@@ -153,9 +153,9 @@ def main():
     
     # 获取用户主目录
     user_home = os.path.expanduser('~')
-    chempredictor_home = os.path.join(user_home, '.chempredictor')
+    chempredictor_home = os.path.join(user_home, 'reaction_model')
     
-    # 检测是否可用CUDA
+    # 检测是否可用
     try:
         import torch
         cuda_available = torch.cuda.is_available()
@@ -191,19 +191,6 @@ def main():
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     data_path = os.path.join(project_root, 'data', 'raw', 'doyle_buchwald-hartwig_dataset.csv')
     predictor.train(data_path)
-    
-    # 预测示例
-    test_reaction = {
-        "Ligand": "CC(C)C(C=C(C(C)C)C=C1C(C)C)=C1C2=C(P([C@@]3(C[C@@H]4C5)C[C@H](C4)C[C@H]5C3)[C@]6(C7)C[C@@H](C[C@@H]7C8)C[C@@H]8C6)C(OC)=CC=C2OC",
-        "Additive": "CC1=CC(C)=NO1",
-        "Base": "CN(C)P(N(C)C)(N(C)C)=NP(N(C)C)(N(C)C)=NCC",
-        "Aryl_halide": "ClC1=NC=CC=C1"
-    }
-    
-    print("\n===== 单样本预测 =====")
-    results = predictor.predict(test_reaction)
-    print("预测结果:")
-    print(f"预测产率: {format_predictions(results['predictions'])}")
     
     # 评估模型
     print("\n===== 模型评估 =====")
