@@ -18,6 +18,10 @@ from chempredictor import ChemPredictor
 
 def create_config():
     """创建配置"""
+    # 获取用户主目录
+    user_home = os.path.expanduser('~')
+    chempredictor_home = os.path.join(user_home, '.chempredictor')
+    
     config = {
         "pipeline": {
             "steps": {
@@ -102,16 +106,19 @@ def create_config():
         },
         "output": {
             "save_model": True,
-            "model_path": "models/doyle_buchwald_hartwig_mlp_model.pkl",
-            "predictions_path": "results/",
+            "model_path": os.path.join(chempredictor_home, "models", "doyle_buchwald_hartwig_mlp_model.pkl"),
+            "predictions_path": os.path.join(chempredictor_home, "results"),
             "report_format": "json"
         }
     }
     
+    # 创建必要的目录
+    os.makedirs(os.path.join(chempredictor_home, "models"), exist_ok=True)
+    os.makedirs(os.path.join(chempredictor_home, "results"), exist_ok=True)
+    os.makedirs(os.path.join(chempredictor_home, "configs"), exist_ok=True)
+    
     # 保存配置到文件
-    config_dir = os.path.join(os.path.dirname(__file__), '..', 'configs')
-    os.makedirs(config_dir, exist_ok=True)
-    config_path = os.path.join(config_dir, 'doyle_buchwald_hartwig_mlp_config.yaml')
+    config_path = os.path.join(chempredictor_home, "configs", "doyle_buchwald_hartwig_mlp_config.yaml")
     
     with open(config_path, 'w', encoding='utf-8') as f:
         yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
@@ -136,6 +143,10 @@ def main():
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
     
+    # 获取用户主目录
+    user_home = os.path.expanduser('~')
+    chempredictor_home = os.path.join(user_home, '.chempredictor')
+    
     # 检测是否可用CUDA
     try:
         import torch
@@ -149,11 +160,6 @@ def main():
         device = "cpu"
         print("\n===== 硬件信息 =====")
         print("未检测到PyTorch，将使用CPU进行训练")
-    
-    # 创建必要的目录
-    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-    models_dir = os.path.join(project_root, 'models')
-    os.makedirs(models_dir, exist_ok=True)
     
     # 创建配置
     config_path = create_config()
@@ -174,6 +180,7 @@ def main():
     predictor = ChemPredictor(config_path=config_path)
     
     # 训练模型
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     data_path = os.path.join(project_root, 'data', 'raw', 'doyle_buchwald-hartwig_dataset.csv')
     predictor.train(data_path)
     
@@ -213,15 +220,13 @@ def main():
     
     try:
         # 保存模型
-        model_filename = 'doyle_buchwald_hartwig_mlp_model.pkl'
-        model_path = os.path.join(models_dir, model_filename)
+        model_path = os.path.join(chempredictor_home, "models", "doyle_buchwald_hartwig_mlp_model.pkl")
         predictor.save(model_path)
         print(f"\n模型已保存到: {model_path}")
-    except PermissionError:
-        print(f"\n警告：无法保存模型到 {model_path}")
-        print("请检查文件夹权限或尝试以管理员身份运行程序")
+        print(f"所有文件都保存在: {chempredictor_home}")
     except Exception as e:
         print(f"\n保存模型时发生错误: {str(e)}")
+        print(f"请确保目录 {chempredictor_home} 存在且有写入权限")
 
 if __name__ == "__main__":
     main() 
