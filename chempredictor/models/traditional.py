@@ -5,11 +5,14 @@
 import numpy as np
 from typing import Dict, Any, Optional, Union, List
 import logging
+import torch
+from pytorch_lightning import Trainer
+from pytorch_lightning.callbacks import EarlyStopping
 
 from chempredictor.models.base import BaseModel, register_model
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
-from sklearn.neural_network import MLPRegressor, MLPClassifier
 from sklearn.preprocessing import StandardScaler
+from .torch_models import LightningMLP
 
 # 检查scikit-learn是否可用
 try:
@@ -342,198 +345,111 @@ class LightGBMModel(BaseModel):
         
         return self.model.predict_proba(X)
 
-@register_model("mlp")
+@register_model('mlp')
 class MLPModel(BaseModel):
-    """
-    多层感知机模型
+    """MLP模型包装类"""
     
-    基于scikit-learn的MLPRegressor和MLPClassifier实现
-    """
-    
-    def __init__(self, task_type: str = "regression", **kwargs):
+    def __init__(self, task_type: str = "regression", device: str = "cpu", **kwargs):
         """
         初始化MLP模型
         
-        参数:
-            task_type: 任务类型，'regression'或'classification'
-            **kwargs: 传递给MLPRegressor或MLPClassifier的参数
+        Args:
+            task_type: 任务类型，'regression' 或 'classification'
+            device: 计算设备，'cpu' 或 'cuda'
+            **kwargs: 其他参数，将传递给LightningMLP
         """
-        super().__init__(task_type=task_type)
-        self.logger = logging.getLogger(__name__)
+        super().__init__(task_type)
+        self.device = device
+        self.model = None
+        self.model_kwargs = kwargs
         
-        # 特征标准化器
-        self.scaler = StandardScaler()
-        
-        # 设置默认参数
-        default_params = {
-            "hidden_layer_sizes": [100, 50],
-            "activation": "relu",
-            "solver": "adam",
-            "alpha": 0.0001,
-            "batch_size": "auto",
-            "learning_rate": "adaptive",
-            "learning_rate_init": 0.001,
-            "max_iter": 1000,
-            "early_stopping": True,
-            "validation_fraction": 0.1,
-            "n_iter_no_change": 10,
-            "random_state": 42,
-            "verbose": True  # 启用详细输出
+        # 设置训练器参数
+        self.trainer_kwargs = {
+            'max_epochs': kwargs.get('max_epochs', 100),
+            'accelerator': 'cuda' if device == 'cuda' else 'cpu',
+            'devices': 1,
+            'callbacks': [
+                EarlyStopping(
+                    monitor='val_loss',
+                    patience=kwargs.get('patience', 10),
+                    mode='min'
+                )
+            ],
+            'enable_progress_bar': kwargs.get('verbose', True)
         }
         
-        # 更新参数
-        self.params = default_params.copy()
-        self.params.update(kwargs)
-        
-        # 将列表转换为元组（scikit-learn要求）
-        if isinstance(self.params["hidden_layer_sizes"], list):
-            self.params["hidden_layer_sizes"] = tuple(self.params["hidden_layer_sizes"])
-        
-        # 初始化模型
-        if self.task_type == "regression":
-            self.model = MLPRegressor(**self.params)
-        else:
-            self.model = MLPClassifier(**self.params)
+    def fit(self, X: np.ndarray, y: np.ndarray):
+        """训练模型"""
+        # 确保输入数据是numpy数组
+        if not isinstance(X, np.ndarray):
+            X = X.to_numpy()
+        if not isinstance(y, np.ndarray):
+            y = y.to_numpy()
             
-        self.logger.info(f"初始化MLP模型，任务类型: {task_type}")
+        # 转换数据为PyTorch张量并移动到指定设备
+        X = torch.FloatTensor(X).to(self.device)
+        y = torch.FloatTensor(y.astype(np.float32)).view(-1, 1).to(self.device)
         
-        # 初始化训练历史记录
-        self.history = {
-            'loss': [],
-            'val_loss': [],
-            'n_iter': 0,
-            'best_loss': float('inf'),
-            'best_iter': 0
-        }
+        # 创建数据集
+        dataset = torch.utils.data.TensorDataset(X, y)
         
-    def _log_progress(self, model):
-        """记录训练进度"""
-        if not hasattr(model, 'loss_curve_'):
-            return
+        # 划分训练集和验证集
+        val_size = int(len(dataset) * self.model_kwargs.get('validation_fraction', 0.1))
+        train_size = len(dataset) - val_size
+        train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
         
-        current_loss = model.loss_curve_[-1]
-        self.history['loss'].append(current_loss)
+        # 创建数据加载器
+        train_loader = torch.utils.data.DataLoader(
+            train_dataset,
+            batch_size=self.model_kwargs.get('batch_size', 32),
+            shuffle=True,
+            num_workers=0  # 避免多进程问题
+        )
+        val_loader = torch.utils.data.DataLoader(
+            val_dataset,
+            batch_size=self.model_kwargs.get('batch_size', 32),
+            num_workers=0  # 避免多进程问题
+        )
         
-        if hasattr(model, 'validation_scores_'):
-            val_loss = -model.validation_scores_[-1]  # 验证分数是负的损失
-            self.history['val_loss'].append(val_loss)
-            
-            if val_loss < self.history['best_loss']:
-                self.history['best_loss'] = val_loss
-                self.history['best_iter'] = len(self.history['loss'])
+        # 初始化模型并移动到指定设备
+        self.model = LightningMLP(
+            input_size=X.shape[1],
+            task_type=self.task_type,
+            **self.model_kwargs
+        )
+        self.model = self.model.to(self.device)
         
-        self.history['n_iter'] = len(self.history['loss'])
-        
-        # 打印训练进度
-        if self.history['n_iter'] % 10 == 0:  # 每10次迭代打印一次
-            msg = f"迭代 {self.history['n_iter']}: loss={current_loss:.4f}"
-            if hasattr(model, 'validation_scores_'):
-                msg += f", val_loss={val_loss:.4f}"
-            if self.history['best_iter'] == self.history['n_iter']:
-                msg += " (最佳模型)"
-            self.logger.info(msg)
-        
-    def fit(self, X: np.ndarray, y: np.ndarray) -> "MLPModel":
-        """
-        训练模型
-        
-        参数:
-            X: 特征矩阵
-            y: 目标值
-            
-        返回:
-            训练后的模型实例
-        """
-        self.logger.info("训练MLP模型")
-        self.logger.info(f"网络结构: 输入层({X.shape[1]}) -> " + 
-                        " -> ".join(str(size) for size in self.params['hidden_layer_sizes']) +
-                        f" -> 输出层({1 if self.task_type == 'regression' else len(np.unique(y))})")
-        
-        # 标准化特征
-        X_scaled = self.scaler.fit_transform(X)
-        
-        # 重置训练历史
-        self.history = {
-            'loss': [],
-            'val_loss': [],
-            'n_iter': 0,
-            'best_loss': float('inf'),
-            'best_iter': 0
-        }
+        # 创建训练器
+        trainer = Trainer(**self.trainer_kwargs)
         
         # 训练模型
-        self.model.fit(X_scaled, y)
-        
-        # 记录最终训练状态
-        self._log_progress(self.model)
-        
-        # 打印训练总结
-        self.logger.info(f"\n训练完成:")
-        self.logger.info(f"- 总迭代次数: {self.history['n_iter']}")
-        self.logger.info(f"- 最终损失: {self.history['loss'][-1]:.4f}")
-        if self.history['val_loss']:
-            self.logger.info(f"- 最佳验证损失: {self.history['best_loss']:.4f} (迭代 {self.history['best_iter']})")
-        
-        # 设置状态
-        self.is_fitted = True
+        trainer.fit(self.model, train_loader, val_loader)
         
         return self
-    
-    def get_training_history(self) -> Dict[str, Any]:
-        """
-        获取训练历史记录
         
-        返回:
-            包含训练历史的字典
-        """
-        return self.history
-    
     def predict(self, X: np.ndarray) -> np.ndarray:
-        """
-        预测
-        
-        参数:
-            X: 特征矩阵
+        """预测"""
+        if self.model is None:
+            raise ValueError("模型尚未训练")
             
-        返回:
-            预测值
-        """
-        if not self.is_fitted:
-            raise ValueError("模型尚未训练，请先调用fit方法")
+        # 确保输入数据是numpy数组
+        if not isinstance(X, np.ndarray):
+            X = X.to_numpy()
+            
+        # 转换数据为PyTorch张量并移动到指定设备
+        X = torch.FloatTensor(X).to(self.device)
         
-        # 标准化特征
-        X_scaled = self.scaler.transform(X)
+        # 设置为评估模式
+        self.model.eval()
         
         # 预测
-        return self.model.predict(X_scaled)
-    
-    def predict_proba(self, X: np.ndarray) -> np.ndarray:
-        """
-        预测概率（仅用于分类任务）
-        
-        参数:
-            X: 特征矩阵
+        with torch.no_grad():
+            predictions = self.model(X)
             
-        返回:
-            预测概率
-        """
-        if self.task_type != "classification":
-            raise ValueError("predict_proba方法仅适用于分类任务")
+        return predictions.cpu().numpy().reshape(-1)
         
-        if not self.is_fitted:
-            raise ValueError("模型尚未训练，请先调用fit方法")
-        
-        # 标准化特征
-        X_scaled = self.scaler.transform(X)
-        
-        # 预测概率
-        return self.model.predict_proba(X_scaled)
-    
-    def get_feature_importances(self) -> Optional[np.ndarray]:
-        """
-        获取特征重要性
-        
-        返回:
-            None，因为MLP模型不直接提供特征重要性
-        """
-        return None 
+    def get_training_history(self):
+        """获取训练历史"""
+        if self.model is None:
+            raise ValueError("模型尚未训练")
+        return self.model.get_training_history() 

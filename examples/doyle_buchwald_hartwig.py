@@ -23,6 +23,9 @@ def create_config():
     chempredictor_home = os.path.join(user_home, '.chempredictor')
     
     config = {
+        # 添加全局随机数种子设置
+        "random_seed": 42,
+        
         "pipeline": {
             "steps": {
                 "data_loading": {
@@ -70,33 +73,38 @@ def create_config():
                     "task_type": "regression",
                     "device": "auto",  # 可选值: "auto", "cpu", "cuda"
                     "params": {
-                        "hidden_layer_sizes": [1024, 512, 256, 128],
+                        # PyTorch Lightning MLP参数
+                        "hidden_layer_sizes": [2048, 1024, 512, 256],
                         "activation": "relu",
-                        "solver": "adam",
-                        "alpha": 0.0001,
-                        "batch_size": "auto",
-                        "learning_rate": "adaptive",
-                        "learning_rate_init": 0.001,
-                        "max_iter": 1000,
-                        "early_stopping": True,
+                        "learning_rate": 0.001,  # 对应LightningMLP中的learning_rate参数
+                        "weight_decay": 0.0001,  # 对应LightningMLP中的weight_decay参数
+                        "batch_size": 32,
+                        "max_epochs": 100,  # 改为max_epochs以匹配PyTorch Lightning
                         "validation_fraction": 0.1,
-                        "n_iter_no_change": 10,
+                        "patience": 10,  # 改为patience以匹配EarlyStopping回调
                         "random_state": 42,
-                        "verbose": True
-                    },
-                    "cv": {
-                        "method": "kfold",
-                        "n_splits": 5,
-                        "shuffle": True,
-                        "random_state": 42
+                        "verbose": True,
+                        
+                        # 优化器和学习率调度器的额外参数
+                        "optimizer": {
+                            "type": "adam",
+                            "betas": [0.9, 0.999],
+                            "eps": 1e-8
+                        },
+                        "scheduler": {
+                            "factor": 0.5,
+                            "patience": 5,
+                            "min_lr": 1e-6,
+                            "threshold": 1e-4
+                        }
                     }
                 },
                 "evaluation": {
                     "metrics": {
                         "regression": ["rmse", "mae", "r2"]
                     },
-                    "feature_importance": False,  # MLP不支持传统的特征重要性
-                    "shap_analysis": False  # 使用SHAP值来解释模型
+                    "feature_importance": False,
+                    "shap_analysis": False
                 }
             }
         },
