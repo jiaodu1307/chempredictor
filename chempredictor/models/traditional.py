@@ -349,7 +349,7 @@ class LightGBMModel(BaseModel):
 class MLPModel(BaseModel):
     """MLP模型包装类"""
     
-    def __init__(self, task_type: str = "regression", device: str = "cuda", **kwargs):
+    def __init__(self, task_type: str = "regression", **kwargs):
         """
         初始化MLP模型
         
@@ -359,14 +359,14 @@ class MLPModel(BaseModel):
             **kwargs: 其他参数，将传递给LightningMLP
         """
         super().__init__(task_type)
-        self.device = device
         self.model = None
         self.model_kwargs = kwargs
+        self.device = kwargs.get('device', 'cpu')
         
         # 设置训练器参数
         self.trainer_kwargs = {
             'max_epochs': kwargs.get('max_epochs', 100),
-            'accelerator': 'cuda' if device == 'cuda' else 'cpu',
+            'accelerator': self.device,
             'devices': 1,
             'callbacks': [
                 EarlyStopping(

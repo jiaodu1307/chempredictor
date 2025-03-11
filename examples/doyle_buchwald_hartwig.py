@@ -71,18 +71,18 @@ def create_config():
                 "model_training": {
                     "type": "mlp",
                     "task_type": "regression",
-                    "device": "cuda",  # 可选值: "auto", "cpu", "cuda"
                     "params": {
                         # PyTorch Lightning MLP参数
+                        "device": "cuda",  # 可选值: "auto", "cpu", "cuda"
                         "hidden_layer_sizes": [256],
                         "activation": "relu",
                         "learning_rate": 0.001,  # 对应LightningMLP中的learning_rate参数
                         "weight_decay": 0.0001,  # 对应LightningMLP中的weight_decay参数
                         "batch_size": 32,
-                        "max_epochs": 40,  # 改为max_epochs以匹配PyTorch Lightning
-                        "validation_fraction": 0.1,
+                        "max_epochs": 10,  # 改为max_epochs以匹配PyTorch Lightning
+                        "validation_fraction": 0.3, # 验证集比例
                         "patience": 10,  # 改为patience以匹配EarlyStopping回调
-                        "random_state": 2,
+                        "random_state": 42,
                         "verbose": True,
                         
                         # 优化器和学习率调度器的额外参数
