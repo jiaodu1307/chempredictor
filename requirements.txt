@@ -76,3 +76,6 @@ mypy>=0.910
 flake8>=3.9.0
 pre-commit>=2.15.0
 tensorboard>=2.7.0
+
+# 可选依赖
+memory-profiler>=0.60.0  # 用于内存分析，可选安装

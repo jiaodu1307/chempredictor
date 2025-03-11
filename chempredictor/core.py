@@ -94,7 +94,32 @@ class ChemPredictor:
     def _build_pipeline(self):
         """构建处理流水线"""
         try:
-            return build_pipeline(self.config['pipeline'])
+            pipeline_config = self.config.get('pipeline', {})
+            if not isinstance(pipeline_config, dict):
+                raise ValueError("pipeline配置必须是字典类型")
+            
+            steps = pipeline_config.get('steps', {})
+            if not isinstance(steps, dict):
+                raise ValueError("pipeline.steps配置必须是字典类型")
+            
+            # 确保配置格式正确并扁平化
+            for step_name, step_config in steps.items():
+                if not isinstance(step_config, dict):
+                    raise ValueError(f"步骤'{step_name}'的配置必须是字典类型")
+                
+                # 扁平化数据加载配置
+                if step_name == 'data_loading':
+                    file_config = step_config.get('file_config', {})
+                    loader_config = step_config.get('loader_config', {})
+                    if file_config or loader_config:
+                        # 合并file_config和loader_config
+                        steps[step_name] = {**file_config, **loader_config}
+                        self.logger.info(f"扁平化后的数据加载配置: {steps[step_name]}")
+                    else:
+                        # 如果没有嵌套结构，保持原样
+                        self.logger.info(f"使用原始数据加载配置: {step_config}")
+            
+            return build_pipeline(pipeline_config)
         except Exception as e:
             raise ModelError(f"构建pipeline失败: {str(e)}") from e
             

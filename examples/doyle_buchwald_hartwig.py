@@ -8,19 +8,36 @@ Doyle-Buchwald-Hartwig反应产率预测示例 - 使用MLP模型
 import os
 import sys
 import logging
+from pathlib import Path
 import yaml
 import numpy as np
+from typing import Dict, Any
 
 # 添加项目根目录到Python路径
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from chempredictor import ChemPredictor
+from chempredictor.utils.profiling import profile_section, log_performance, profile_memory
+from chempredictor.data_loading import DataLoader
+from chempredictor.utils.logging import setup_logging
 
-def create_config():
-    """创建配置"""
+# 设置日志配置
+setup_logging({
+    'level': 'INFO',
+    'log_file': str(Path(__file__).parent.parent / 'logs' / 'doyle_buchwald_hartwig.log')
+})
+
+logger = logging.getLogger(__name__)
+
+def create_config() -> str:
+    """
+    创建配置
+    
+    Returns:
+        str: 配置文件路径
+    """
     # 获取用户主目录
-    user_home = os.path.expanduser('~')
-    chempredictor_home = os.path.join(user_home, '.chempredictor')
+    chempredictor_home = Path.home() / '.chempredictor'
     
     config = {
         # 添加全局随机数种子设置
@@ -32,7 +49,14 @@ def create_config():
                     "file_type": "csv",
                     "target_column": "Output",
                     "feature_columns": ["Ligand", "Additive", "Base", "Aryl_halide"],
-                    "missing_value_strategy": "drop"
+                    "missing_value_strategy": "drop",
+                    "batch_size": 32,
+                    "num_workers": 0,
+                    "shuffle": True,
+                    "pandas_kwargs": {
+                        "index_col": None,
+                        "encoding": "utf-8"
+                    }
                 },
                 "feature_encoding": {
                     "Ligand": {
@@ -72,26 +96,24 @@ def create_config():
                     "type": "mlp",
                     "task_type": "regression",
                     "params": {
-                        # PyTorch Lightning MLP参数
-                        "device": "cuda",  # 可选值: "auto", "cpu", "cuda"
-                        "hidden_layer_sizes": [256],
+                        "device": "cuda",
+                        "hidden_layer_sizes": [512],
                         "activation": "relu",
-                        "learning_rate": 0.001,  # 对应LightningMLP中的learning_rate参数
-                        "weight_decay": 0.0001,  # 对应LightningMLP中的weight_decay参数
+                        "learning_rate": 0.001,
+                        "weight_decay": 0.0001,
                         "batch_size": 32,
-                        "max_epochs": 10,  # 改为max_epochs以匹配PyTorch Lightning
-                        "validation_fraction": 0.3, # 验证集比例
-                        "patience": 10,  # 改为patience以匹配EarlyStopping回调
+                        "max_epochs": 50,
+                        "validation_fraction": 0.5,
+                        "patience": 10,
                         "random_state": 42,
                         "verbose": True,
-                        
-                        # 优化器和学习率调度器的额外参数
                         "optimizer": {
                             "type": "adam",
                             "betas": [0.9, 0.999],
                             "eps": 1e-8
                         },
                         "scheduler": {
+                            "type": "reduce_on_plateau",
                             "factor": 0.5,
                             "patience": 5,
                             "min_lr": 1e-6,
@@ -101,40 +123,102 @@ def create_config():
                 },
                 "evaluation": {
                     "metrics": {
-                        "regression": ["rmse", "mae", "r2"]
+                        "regression": ["rmse", "mae", "r2", "mse"]
                     },
                     "feature_importance": False,
-                    "shap_analysis": False
+                    "shap_analysis": False,
+                    "cross_validation": {
+                        "enabled": True,
+                        "n_splits": 5,
+                        "shuffle": True
+                    }
                 }
             }
         },
         "logging": {
-            "level": "INFO",
-            "file": "logs/doyle_buchwald_hartwig_mlp.log"
+            "version": 1,
+            "disable_existing_loggers": False,
+            "formatters": {
+                "standard": {
+                    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+                },
+                "detailed": {
+                    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s - [%(filename)s:%(lineno)d]"
+                }
+            },
+            "handlers": {
+                "console": {
+                    "class": "logging.StreamHandler",
+                    "level": "INFO",
+                    "formatter": "standard",
+                    "stream": "ext://sys.stdout"
+                },
+                "file": {
+                    "class": "logging.handlers.RotatingFileHandler",
+                    "level": "DEBUG",
+                    "formatter": "detailed",
+                    "filename": str(chempredictor_home / "logs" / "doyle_buchwald_hartwig_mlp.log"),
+                    "maxBytes": 10485760,
+                    "backupCount": 5
+                }
+            },
+            "loggers": {
+                "chempredictor": {
+                    "level": "INFO",
+                    "handlers": ["console", "file"],
+                    "propagate": False
+                }
+            },
+            "root": {
+                "level": "WARNING",
+                "handlers": ["console"]
+            }
         },
         "output": {
             "save_model": True,
-            "model_path": os.path.join(chempredictor_home, "models", "doyle_buchwald_hartwig_mlp_model.pkl"),
-            "predictions_path": os.path.join(chempredictor_home, "results"),
-            "report_format": "json"
+            "model_path": str(chempredictor_home / "models" / "doyle_buchwald_hartwig_mlp_model.pkl"),
+            "predictions_path": str(chempredictor_home / "results"),
+            "report_format": "json",
+            "save_checkpoints": True,
+            "checkpoint_dir": str(chempredictor_home / "checkpoints")
+        },
+        "cache": {
+            "enabled": True,
+            "dir": str(chempredictor_home / "cache"),
+            "max_size": 1024
         }
     }
     
     # 创建必要的目录
-    os.makedirs(os.path.join(chempredictor_home, "models"), exist_ok=True)
-    os.makedirs(os.path.join(chempredictor_home, "results"), exist_ok=True)
-    os.makedirs(os.path.join(chempredictor_home, "configs"), exist_ok=True)
+    for dir_path in [
+        chempredictor_home / "models",
+        chempredictor_home / "results",
+        chempredictor_home / "configs",
+        chempredictor_home / "logs",
+        chempredictor_home / "cache",
+        chempredictor_home / "checkpoints"
+    ]:
+        dir_path.mkdir(parents=True, exist_ok=True)
     
     # 保存配置到文件
-    config_path = os.path.join(chempredictor_home, "configs", "doyle_buchwald_hartwig_mlp_config.yaml")
+    config_path = chempredictor_home / "configs" / "doyle_buchwald_hartwig_mlp_config.yaml"
     
     with open(config_path, 'w', encoding='utf-8') as f:
         yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
     
-    return config_path
+    return str(config_path)
 
-def format_predictions(predictions) -> str:
-    """格式化预测结果"""
+@log_performance
+def format_predictions(predictions: np.ndarray) -> str:
+    """
+    格式化预测结果
+    
+    Args:
+        predictions: 预测结果数组
+        
+    Returns:
+        str: 格式化后的预测结果字符串
+    """
     if isinstance(predictions, (list, np.ndarray)):
         if len(predictions) == 1:
             return f"{predictions[0]:.2f}%"
@@ -143,85 +227,111 @@ def format_predictions(predictions) -> str:
     else:
         return f"{predictions:.2f}%"
 
+def check_hardware() -> Dict[str, Any]:
+    """
+    检查硬件环境
+    
+    Returns:
+        Dict[str, Any]: 硬件信息字典
+    """
+    with profile_section("硬件检测"):
+        try:
+            import torch
+            cuda_available = torch.cuda.is_available()
+            device = "cuda" if cuda_available else "cpu"
+            info = {
+                "device": device,
+                "cuda_available": cuda_available
+            }
+            if cuda_available:
+                info["gpu_name"] = torch.cuda.get_device_name(0)
+                info["gpu_memory"] = torch.cuda.get_device_properties(0).total_memory
+        except ImportError:
+            info = {
+                "device": "cpu",
+                "cuda_available": False
+            }
+    return info
+
+@profile_memory
+@log_performance
+def train_model():
+    """训练Doyle-Buchwald-Hartwig反应模型"""
+    
+    # 数据加载配置
+    data_loading_config = {
+        'file_type': 'csv',
+        'target_column': 'Output',
+        'feature_columns': [
+            'Ligand', 'Additive', 'Base', 'Aryl_halide'
+        ],
+        'missing_value_strategy': 'mean',
+        'batch_size': 32,
+        'num_workers': 2,
+        'shuffle': True,
+        'pandas_kwargs': {
+            'index_col': None,
+            'encoding': 'utf-8'
+        }
+    }
+    
+    # 初始化数据加载器
+    data_loader = DataLoader(**data_loading_config)
+    
+    # 加载训练数据
+    train_data = data_loader.load('data/doyle_buchwald_hartwig_train.csv')
+    
+    logger.info("开始训练模型...")
+    # ... 模型训练代码 ...
+
 def main():
     """主函数"""
-    # 设置日志
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
-    
-    # 获取用户主目录
-    user_home = os.path.expanduser('~')
-    chempredictor_home = os.path.join(user_home, 'reaction_model')
-    
-    # 检测是否可用
-    try:
-        import torch
-        cuda_available = torch.cuda.is_available()
-        device = "cuda" if cuda_available else "cpu"
-        print(f"\n===== 硬件信息 =====")
-        print(f"检测到可用设备: {device.upper()}")
-        if cuda_available:
-            print(f"GPU型号: {torch.cuda.get_device_name(0)}")
-    except ImportError:
-        device = "cpu"
-        print("\n===== 硬件信息 =====")
-        print("未检测到PyTorch，将使用CPU进行训练")
-    
-    # 创建配置
-    config_path = create_config()
-    
-    # 根据实际情况修改配置中的device设置
-    with open(config_path, 'r', encoding='utf-8') as f:
-        config = yaml.safe_load(f)
-    
-    config['pipeline']['steps']['model_training']['device'] = device
-    
-    with open(config_path, 'w', encoding='utf-8') as f:
-        yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
-    
-    print(f"已创建配置文件: {config_path}")
-    print(f"训练设备设置为: {device.upper()}")
-    
-    # 初始化预测器
-    predictor = ChemPredictor(config_path=config_path)
-    
-    # 训练模型
-    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-    data_path = os.path.join(project_root, 'data', 'raw', 'doyle_buchwald-hartwig_dataset.csv')
-    predictor.train(data_path)
-    
-    # 评估模型
-    print("\n===== 模型评估 =====")
-    eval_results = predictor.evaluate(data_path)
-    print("评估指标:")
-    for metric, value in eval_results.items():
-        if metric not in ['feature_importance', 'shap_values']:
-            print(f"- {metric}: {value:.4f}")
-    
-    # 显示SHAP值分析结果
-    if 'shap_values' in eval_results:
-        print("\nSHAP值分析已完成，结果已保存")
-    
-    # 获取训练历史
-    if hasattr(predictor.pipeline.model, 'get_training_history'):
-        history = predictor.pipeline.model.get_training_history()
-        print("\n===== 训练历史 =====")
-        print(f"总迭代次数: {history['n_iter']}")
-        print(f"最终损失: {history['loss'][-1]:.4f}")
-        if history['val_loss']:
-            print(f"最佳验证损失: {history['best_loss']:.4f} (迭代 {history['best_iter']})")
+    # 检查硬件环境
+    hardware_info = check_hardware()
+    logger.info("===== 硬件信息 =====")
+    logger.info(f"检测到可用设备: {hardware_info['device'].upper()}")
+    if hardware_info['cuda_available']:
+        logger.info(f"GPU型号: {hardware_info['gpu_name']}")
+        logger.info(f"GPU内存: {hardware_info['gpu_memory'] / 1024**3:.2f} GB")
     
     try:
-        # 保存模型
-        model_path = os.path.join(chempredictor_home, "models", "doyle_buchwald_hartwig_mlp_model.pkl")
-        predictor.save(model_path)
-        print(f"\n模型已保存到: {model_path}")
-        print(f"所有文件都保存在: {chempredictor_home}")
+        with profile_section("配置初始化"):
+            # 创建配置
+            config_path = create_config()
+            logger.info(f"已创建配置文件: {config_path}")
+            
+            # 初始化预测器
+            predictor = ChemPredictor(config_path=config_path)
+        
+        with profile_section("模型训练"):
+            # 训练模型
+            project_root = Path(__file__).parent.parent
+            data_path = project_root / 'data' / 'raw' / 'doyle_buchwald-hartwig_dataset.csv'
+            predictor.train(data_path)
+        
+        with profile_section("模型评估"):
+            # 评估模型
+            logger.info("===== 模型评估 =====")
+            eval_results = predictor.evaluate(data_path)
+            
+            # 输出评估指标
+            for metric, value in eval_results.items():
+                if isinstance(value, (int, float)):
+                    logger.info(f"{metric}: {value:.4f}")
+            
+            # 特征重要性分析
+            if eval_results.get('feature_importance'):
+                logger.info("\n特征重要性排名:")
+                for feature, importance in eval_results['feature_importance'].items():
+                    logger.info(f"- {feature}: {importance:.4f}")
+            
+            # SHAP值分析
+            if eval_results.get('shap_values'):
+                logger.info("\nSHAP值分析已完成，结果已保存")
+            
     except Exception as e:
-        print(f"\n保存模型时发生错误: {str(e)}")
-        print(f"请确保目录 {chempredictor_home} 存在且有写入权限")
+        logger.error(f"执行过程中发生错误: {str(e)}", exc_info=True)
+        sys.exit(1)
 
 if __name__ == "__main__":
     main() 

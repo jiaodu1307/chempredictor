@@ -7,7 +7,10 @@ import logging
 import numpy as np
 import pandas as pd
 import joblib
+from pathlib import Path
 from typing import Dict, Any, List, Optional, Union, Tuple
+from torch.utils.data import DataLoader as TorchDataLoader
+import torch
 
 from chempredictor.data_loading import DataLoader
 from chempredictor.encoders import get_encoder
@@ -48,7 +51,24 @@ class Pipeline:
         
         # 数据加载器
         data_loading_config = steps.get('data_loading', {})
-        self.data_loader = DataLoader(**data_loading_config)
+        if not isinstance(data_loading_config, dict):
+            self.logger.warning("数据加载配置格式不正确，将使用空配置")
+            data_loading_config = {}
+        
+        # 记录配置信息
+        self.logger.info(f"数据加载器配置: {data_loading_config}")
+        
+        # 初始化数据加载器
+        self.data_loader = DataLoader(
+            file_type=data_loading_config.get('file_type'),
+            target_column=data_loading_config.get('target_column'),
+            feature_columns=data_loading_config.get('feature_columns'),
+            missing_value_strategy=data_loading_config.get('missing_value_strategy', 'mean'),
+            batch_size=data_loading_config.get('batch_size', 32),
+            num_workers=data_loading_config.get('num_workers', 0),
+            shuffle=data_loading_config.get('shuffle', True),
+            pandas_kwargs=data_loading_config.get('pandas_kwargs', {})
+        )
         
         # 特征编码器
         self.feature_encoders = {}
@@ -63,6 +83,13 @@ class Pipeline:
         model_type = model_config.get('type')
         task_type = model_config.get('task_type', 'regression')
         model_params = model_config.get('params', {})
+        
+        # 处理设备配置
+        device = model_params.get('device', 'cpu')
+        if device == 'auto':
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        model_params['device'] = device
+        
         self.model = get_model(model_type, task_type=task_type, **model_params)
         
         # 评估器
@@ -92,22 +119,15 @@ class Pipeline:
         # 加载数据
         X, y = self.data_loader.load(data_path)
         
-        if y is None:
-            raise ValueError("无法找到目标列，请检查配置中的target_column设置")
-        
-        # 保存原始特征名称
-        self.feature_names = list(X.columns)
-        
-        # 编码特征
-        X_encoded, encoded_feature_names = self._encode_features(X, fit=True)
-        self.encoded_feature_names = encoded_feature_names
+        if y is None or (isinstance(y, np.ndarray) and np.isnan(y).all()):
+            raise ValueError("无法找到目标列或目标值全为NaN，请检查配置中的target_column设置")
         
         # 训练模型
-        self.model.fit(X_encoded, y)
+        self.model.fit(X, y)
         
         # 设置状态
         self.is_fitted = True
-        self.train_data_y = y  # 保存训练集目标值，用于计算Q²
+        self.train_data_y = y
         
         return self
     
@@ -173,12 +193,12 @@ class Pipeline:
         
         return results
     
-    def evaluate(self, data: Union[str, Tuple[np.ndarray, np.ndarray]]) -> Dict[str, Any]:
+    def evaluate(self, data: Union[str, Path, Tuple[np.ndarray, np.ndarray]]) -> Dict[str, Any]:
         """
         评估模型性能
         
         参数:
-            data: 数据文件路径或(X, y)元组
+            data: 数据文件路径（字符串或Path对象）或(X, y)元组
             
         返回:
             包含评估指标的字典
@@ -189,9 +209,10 @@ class Pipeline:
         self.logger.info("评估模型性能")
         
         # 加载或处理数据
-        if isinstance(data, str):
+        if isinstance(data, (str, Path)):
             # 从文件加载
-            X, y = self.data_loader.load(data)
+            data_path = str(data)  # 转换Path对象为字符串
+            X, y = self.data_loader.load(data_path)
             if y is None:
                 raise ValueError("无法找到目标列，请检查配置中的target_column设置")
             
@@ -212,19 +233,39 @@ class Pipeline:
             y_train=self.train_data_y if hasattr(self, 'train_data_y') else None
         )
     
-    def _encode_features(self, X: pd.DataFrame, fit: bool = False) -> Tuple[np.ndarray, List[str]]:
+    def _encode_features(self, X: Union[pd.DataFrame, np.ndarray], fit: bool = False) -> Tuple[np.ndarray, List[str]]:
         """
         编码特征
         
         参数:
-            X: 特征数据框
+            X: 特征数据（DataFrame或numpy数组）
             fit: 是否拟合编码器
             
         返回:
             编码后的特征矩阵和特征名称列表
         """
+        # 如果没有特征编码器，直接返回原始数据
+        if not self.feature_encoders:
+            if isinstance(X, np.ndarray):
+                return X, [f"feature_{i}" for i in range(X.shape[1])]
+            else:
+                return X.values, list(X.columns)
+        
         encoded_features = []
         encoded_feature_names = []
+        
+        # 如果输入是numpy数组，转换为DataFrame
+        if isinstance(X, np.ndarray):
+            feature_columns = self.data_loader.feature_columns
+            if feature_columns is None:
+                raise ValueError("使用numpy数组输入时必须指定feature_columns")
+            # 检查列数是否匹配
+            if X.shape[1] == len(feature_columns):
+                X = pd.DataFrame(X, columns=feature_columns)
+            else:
+                # 如果列数不匹配，说明数据可能已经被编码
+                self.logger.info(f"数据形状 {X.shape} 与特征列数 {len(feature_columns)} 不匹配，假定数据已经被编码")
+                return X, [f"encoded_feature_{i}" for i in range(X.shape[1])]
         
         for feature_name, encoder in self.feature_encoders.items():
             if feature_name not in X.columns:
