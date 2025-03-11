@@ -1,20 +1,22 @@
 # ChemPredictor
 
-ChemPredictor是一个用于化学性质预测的Python库框架，提供了模块化的架构和丰富的功能，用于构建和评估化学性质预测模型。
+ChemPredictor 是一个用于化学性质预测的高性能Python库。它提供了灵活的数据处理流水线、多种分子表示方法和先进的机器学习模型。
 
-## 功能特点
+## 特性
 
-- **模块化设计**：独立的数据加载、特征编码、模型训练和评估模块
-- **多种分子表示**：支持Morgan指纹、RDKit指纹、MACCS Keys等多种分子表示方法
-- **多种模型支持**：内置随机森林、XGBoost、LightGBM等多种机器学习模型
-- **灵活的配置系统**：通过YAML配置文件或字典配置整个预测流程
-- **全面的评估指标**：提供RMSE、MAE、R²、Q²、准确率、F1分数等多种评估指标
-- **特征重要性分析**：支持基于模型的特征重要性和SHAP值分析
+- 🧪 支持多种分子表示方法（Morgan指纹、SMILES等）
+- 🤖 内置多种机器学习模型
+- 📊 灵活的数据处理流水线
+- 🚀 高性能计算支持（CPU/GPU）
+- 💾 智能缓存机制
+- 📈 性能监控工具
+- 🔍 完整的错误处理
+- 📝 详细的日志记录
 
 ## 安装
 
 ```bash
-pip install -r requirements.txt
+pip install chempredictor
 ```
 
 ## 快速开始
@@ -24,160 +26,136 @@ pip install -r requirements.txt
 ```python
 from chempredictor import ChemPredictor
 
-# 使用默认配置初始化
+# 初始化预测器
 predictor = ChemPredictor()
 
 # 训练模型
-predictor.train("data/example_reactions.csv")
+predictor.train('data/training.csv')
 
-# 预测新数据
-results = predictor.predict("data/test_reactions.csv")
-print(results)
-
-# 评估模型
-metrics = predictor.evaluate("data/test_reactions.csv")
-print(metrics)
+# 进行预测
+results = predictor.predict('data/test.csv')
 ```
 
-### 使用自定义配置
+### 使用配置文件
 
 ```python
 from chempredictor import ChemPredictor
 
-# 使用自定义配置文件
-predictor = ChemPredictor(config_path="configs/my_config.yaml")
-
-# 或者使用配置字典
-config = {
-    "pipeline": {
-        "steps": {
-            "data_loading": {
-                "file_type": "csv",
-                "target_column": "Yield"
-            },
-            "feature_encoding": {
-                "Reactant": {
-                    "encoder": "morgan_fingerprint",
-                    "params": {"radius": 2, "n_bits": 2048}
-                }
-            },
-            "model_training": {
-                "type": "random_forest",
-                "task_type": "regression"
-            }
-        }
-    }
-}
-predictor = ChemPredictor(config_dict=config)
-
-# 训练和预测
-predictor.train("data/example_reactions.csv")
-results = predictor.predict({"Reactant": "CCO", "Solvent": "Water", "Temperature": 100})
+# 使用自定义配置
+config_path = 'config/my_config.yaml'
+predictor = ChemPredictor(config_path=config_path)
 ```
 
-## 项目结构
-
-```
-chempredictor/
-├── __init__.py           # 包初始化
-├── core.py               # 核心ChemPredictor类
-├── data_loading/         # 数据加载模块
-├── encoders/             # 特征编码模块
-├── models/               # 预测模型模块
-├── evaluation/           # 评估模块
-├── pipeline/             # 管道模块
-└── utils/                # 工具模块
-
-configs/                  # 配置文件目录
-data/                     # 示例数据目录
-```
-
-## 配置文件示例
-
+配置文件示例 (config/my_config.yaml):
 ```yaml
+random_seed: 42
+device: 'cuda'  # 或 'cpu'
 pipeline:
   steps:
-    - data_loading:
-        file_type: csv
-        target_column: Yield
-        feature_columns: [Reactant, Solvent, Temperature]
-        missing_value_strategy: mean
-    
-    - feature_encoding:
-        Reactant: 
-          encoder: morgan_fingerprint
-          params:
-            radius: 2
-            n_bits: 2048
-            chiral: true
-        Solvent:
-          encoder: onehot_encoder
-        Temperature:
-          encoder: standard_scaler
-    
-    - model_training:
-        type: xgboost
-        task_type: regression
+    data_loading:
+      batch_size: 32
+      num_workers: 4
+    feature_encoding:
+      smiles:
+        encoder: 'morgan_fingerprint'
         params:
-          n_estimators: 100
-          max_depth: 6
-          learning_rate: 0.1
-    
-    - evaluation:
-        metrics: 
-          regression: [rmse, r2, mae]
-          classification: [accuracy, f1, roc_auc]
-        feature_importance: true
-        shap_analysis: true
+          radius: 2
+          num_bits: 2048
+    model_training:
+      type: 'neural_network'
+      task_type: 'regression'
+      params:
+        learning_rate: 0.001
+        num_epochs: 100
 ```
 
-## 扩展功能
-
-### 添加新的编码器
+### 性能监控
 
 ```python
-from chempredictor.encoders import BaseEncoder, register_encoder
+from chempredictor.utils.profiling import profile_section, log_performance
 
-@register_encoder("my_encoder")
-class MyEncoder(BaseEncoder):
-    def __init__(self, param1=1, **kwargs):
-        super().__init__(**kwargs)
-        self.param1 = param1
-        
-    def fit(self, data):
-        # 实现拟合逻辑
-        self.is_fitted = True
-        return self
-        
-    def transform(self, data):
-        # 实现转换逻辑
-        return transformed_data
-        
-    def get_output_dim(self):
-        return output_dimension
+@log_performance
+def process_data():
+    with profile_section("数据处理"):
+        # 处理逻辑
+        pass
 ```
 
-### 添加新的模型
+### 使用缓存
 
 ```python
-from chempredictor.models import BaseModel, register_model
+from chempredictor.utils.cache import cache_result, memory_cache
 
-@register_model("my_model")
-class MyModel(BaseModel):
-    def __init__(self, task_type="regression", **kwargs):
-        super().__init__(task_type=task_type, **kwargs)
-        # 初始化模型
-        
-    def fit(self, X, y):
-        # 实现训练逻辑
-        self.is_fitted = True
-        return self
-        
-    def predict(self, X):
-        # 实现预测逻辑
-        return predictions
+@cache_result()
+def expensive_calculation():
+    # 耗时计算
+    pass
+
+@memory_cache()
+def frequent_operation():
+    # 频繁操作
+    pass
 ```
+
+## 开发指南
+
+### 环境设置
+
+```bash
+# 克隆仓库
+git clone https://github.com/yourusername/chempredictor.git
+cd chempredictor
+
+# 创建虚拟环境
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+venv\Scripts\activate  # Windows
+
+# 安装开发依赖
+pip install -e ".[dev]"
+```
+
+### 运行测试
+
+```bash
+# 运行所有测试
+pytest
+
+# 运行带覆盖率报告的测试
+pytest --cov=chempredictor tests/
+
+# 运行特定测试
+pytest tests/test_config.py
+```
+
+### 代码质量检查
+
+```bash
+# 格式化代码
+black chempredictor/
+
+# 运行代码检查
+flake8 chempredictor/
+
+# 类型检查
+mypy chempredictor/
+```
+
+### 构建文档
+
+```bash
+cd docs
+make html
+```
+
+## 贡献指南
+
+1. Fork 项目
+2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 开启 Pull Request
 
 ## 许可证
 
-MIT
+本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件

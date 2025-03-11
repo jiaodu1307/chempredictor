@@ -1,55 +1,71 @@
 """
-日志工具模块
+日志配置模块
 """
 
-import os
 import logging
+import logging.config
+from pathlib import Path
 from typing import Dict, Any, Optional
 
-def setup_logging(config: Optional[Dict[str, Any]] = None) -> None:
+DEFAULT_LOG_CONFIG = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'standard': {
+            'format': '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        },
+        'detailed': {
+            'format': '%(asctime)s - %(name)s - %(levelname)s - %(message)s - [%(filename)s:%(lineno)d]'
+        }
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'level': 'INFO',
+            'formatter': 'standard',
+            'stream': 'ext://sys.stdout'
+        },
+        'file': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'level': 'DEBUG',
+            'formatter': 'detailed',
+            'filename': 'chempredictor.log',
+            'maxBytes': 10485760,  # 10MB
+            'backupCount': 5
+        }
+    },
+    'loggers': {
+        'chempredictor': {
+            'level': 'INFO',
+            'handlers': ['console', 'file'],
+            'propagate': False
+        }
+    },
+    'root': {
+        'level': 'WARNING',
+        'handlers': ['console']
+    }
+}
+
+def setup_logging(
+    config: Optional[Dict[str, Any]] = None,
+    log_dir: Optional[str] = None
+) -> None:
     """
-    设置日志配置
+    设置日志系统
     
-    参数:
-        config: 日志配置字典，包含level和file等键
+    Args:
+        config: 日志配置字典，如果为None则使用默认配置
+        log_dir: 日志文件目录，如果为None则使用当前目录
     """
     if config is None:
-        config = {}
+        config = DEFAULT_LOG_CONFIG.copy()
     
-    # 获取日志级别
-    level_str = config.get('level', 'INFO')
-    level = getattr(logging, level_str.upper())
+    if log_dir is not None:
+        log_path = Path(log_dir)
+        log_path.mkdir(parents=True, exist_ok=True)
+        config['handlers']['file']['filename'] = str(log_path / 'chempredictor.log')
     
-    # 基本配置
-    logging.basicConfig(
-        level=level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-    
-    # 如果指定了日志文件
-    log_file = config.get('file')
-    if log_file:
-        # 确保日志目录存在
-        log_dir = os.path.dirname(log_file)
-        if log_dir:
-            os.makedirs(log_dir, exist_ok=True)
-            
-        # 添加文件处理器
-        file_handler = logging.FileHandler(log_file, encoding='utf-8')
-        file_handler.setLevel(level)
-        file_handler.setFormatter(logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            '%Y-%m-%d %H:%M:%S'
-        ))
-        
-        # 添加到根日志器
-        logging.getLogger('').addHandler(file_handler)
-    
-    # 设置第三方库的日志级别
-    logging.getLogger('matplotlib').setLevel(logging.WARNING)
-    logging.getLogger('rdkit').setLevel(logging.WARNING)
-    logging.getLogger('sklearn').setLevel(logging.WARNING)
-    
-    logger = logging.getLogger(__name__)
-    logger.debug("日志系统已初始化") 
+    logging.config.dictConfig(config)
+    logger = logging.getLogger('chempredictor')
+    logger.info('日志系统初始化完成') 
