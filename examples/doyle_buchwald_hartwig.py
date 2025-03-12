@@ -68,27 +68,24 @@ def create_config() -> str:
                         }
                     },
                     "Additive": {
-                        "encoder": "morgan_fingerprint",
+                        "encoder": "onehot_encoder",
                         "params": {
-                            "radius": 2,
-                            "n_bits": 1024,
-                            "chiral": True
+                            "handle_unknown": "ignore",
+                            "sparse_output": False
                         }
                     },
                     "Base": {
-                        "encoder": "morgan_fingerprint",
+                        "encoder": "onehot_encoder",
                         "params": {
-                            "radius": 2,
-                            "n_bits": 1024,
-                            "chiral": True
+                            "handle_unknown": "ignore",
+                            "sparse_output": False
                         }
                     },
                     "Aryl_halide": {
-                        "encoder": "morgan_fingerprint",
+                        "encoder": "onehot_encoder",
                         "params": {
-                            "radius": 2,
-                            "n_bits": 1024,
-                            "chiral": True
+                            "handle_unknown": "ignore",
+                            "sparse_output": False
                         }
                     }
                 },
@@ -103,7 +100,7 @@ def create_config() -> str:
                         "weight_decay": 0.0001,
                         "batch_size": 32,
                         "max_epochs": 50,
-                        "validation_fraction": 0.5,
+                        "validation_fraction": 0.2,
                         "patience": 10,
                         "random_state": 42,
                         "verbose": True,
