@@ -15,7 +15,7 @@ try:
     SHAP_AVAILABLE = True
 except ImportError:
     SHAP_AVAILABLE = False
-    logging.getLogger(__name__).warning("SHAP未安装，特征重要性分析功能将不可用")
+    logging.getLogger(__name__).warning("SHAP not installed, feature importance analysis will not be available")
 
 class Evaluator:
     """
@@ -41,7 +41,7 @@ class Evaluator:
         self.shap_analysis = shap_analysis
         
         if shap_analysis and not SHAP_AVAILABLE:
-            logging.getLogger(__name__).warning("SHAP未安装，无法进行SHAP分析")
+            logging.getLogger(__name__).warning("SHAP not installed, SHAP analysis will not be performed")
             self.shap_analysis = False
             
         self.logger = logging.getLogger(__name__)
@@ -53,31 +53,26 @@ class Evaluator:
         评估模型性能
         
         参数:
-            model: 模型实例
+            model: 要评估的模型
             X: 特征矩阵
-            y: 真实目标值
+            y: 目标变量
             feature_names: 特征名称列表
-            y_train: 训练集目标值，用于计算Q²
+            y_train: 训练集目标变量（用于计算Q²）
             
         返回:
             包含评估结果的字典
         """
-        self.logger.info(f"评估{model.__class__.__name__}模型")
-        
-        # 预测
-        if self.task_type == 'regression':
-            y_pred = model.predict(X)
-            y_score = None
-        else:  # classification
-            y_pred = model.predict(X)
-            try:
-                y_score = model.predict_proba(X)
-            except (AttributeError, NotImplementedError):
-                self.logger.warning("模型不支持predict_proba方法，无法计算概率")
-                y_score = None
-        
-        # 计算指标
         results = {}
+        
+        # 获取预测值
+        y_pred = model.predict(X)
+        
+        # 只在分类任务中获取预测概率
+        y_score = None
+        if self.task_type == 'classification':
+            y_score = getattr(model, 'predict_proba', lambda x: None)(X)
+        
+        # 计算评估指标
         for name, metric_fn in self.metrics.items():
             try:
                 if name == 'roc_auc' and y_score is not None:
@@ -98,7 +93,7 @@ class Evaluator:
                 results[name] = score
                 self.logger.info(f"{name}: {score:.4f}")
             except Exception as e:
-                self.logger.warning(f"计算{name}指标时出错: {e}")
+                self.logger.warning(f"Error calculating {name} metric: {e}")
         
         # 计算特征重要性
         if self.feature_importance:
@@ -106,7 +101,7 @@ class Evaluator:
                 importances = self._get_feature_importance(model, X, feature_names)
                 results['feature_importance'] = importances
             except Exception as e:
-                self.logger.warning(f"计算特征重要性时出错: {e}")
+                self.logger.warning(f"Error calculating feature importance: {e}")
         
         # 进行SHAP分析
         if self.shap_analysis:
@@ -114,7 +109,7 @@ class Evaluator:
                 shap_values = self._get_shap_values(model, X, feature_names)
                 results['shap_values'] = shap_values
             except Exception as e:
-                self.logger.warning(f"进行SHAP分析时出错: {e}")
+                self.logger.warning(f"Error performing SHAP analysis: {e}")
         
         return results
     

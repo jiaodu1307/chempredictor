@@ -33,7 +33,7 @@ class Pipeline:
         """
         self.config = config
         self.logger = logging.getLogger(__name__)
-        self.logger.info("初始化管道")
+        self.logger.info("Initializing pipeline")
         
         # 初始化组件
         self._init_components()
@@ -322,5 +322,5 @@ class Pipeline:
         返回:
             加载的管道实例
         """
-        logging.getLogger(__name__).info(f"从{path}加载管道")
+        logging.getLogger(__name__).info(f"Loading pipeline from: {path}")
         return joblib.load(path) 

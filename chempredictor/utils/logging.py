@@ -92,4 +92,4 @@ def setup_logging(
     # 应用配置
     logging.config.dictConfig(final_config)
     logger = logging.getLogger('chempredictor')
-    logger.info('日志系统初始化完成') 
+    logger.info('Logging system initialized') 

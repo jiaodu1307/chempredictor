@@ -27,13 +27,13 @@ class OneHotEncoder(BaseEncoder):
     将分类特征转换为One-Hot编码
     """
     
-    def __init__(self, handle_unknown: str = 'error', sparse: bool = False, **kwargs):
+    def __init__(self, handle_unknown: str = 'error', sparse_output: bool = False, **kwargs):
         """
         初始化One-Hot编码器
         
         参数:
             handle_unknown: 处理未知类别的策略，'error'或'ignore'
-            sparse: 是否返回稀疏矩阵
+            sparse_output: 是否返回稀疏矩阵
             **kwargs: 其他参数
         """
         super().__init__(**kwargs)
@@ -42,10 +42,10 @@ class OneHotEncoder(BaseEncoder):
             raise ImportError("scikit-learn未安装，无法使用OneHotEncoder")
             
         self.handle_unknown = handle_unknown
-        self.sparse = sparse
+        self.sparse_output = sparse_output
         self.encoder = SklearnOneHotEncoder(
             handle_unknown=handle_unknown,
-            sparse=sparse
+            sparse_output=sparse_output
         )
         self.categories_ = None
         self.output_dim = None

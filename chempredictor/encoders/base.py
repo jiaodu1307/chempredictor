@@ -23,7 +23,7 @@ def register_encoder(name: str):
     """
     def decorator(cls):
         if name in ENCODER_REGISTRY:
-            logging.getLogger(__name__).warning(f"编码器 '{name}' 已存在，将被覆盖")
+            logging.getLogger(__name__).warning(f"Encoder '{name}' already exists and will be overwritten")
         ENCODER_REGISTRY[name] = cls
         cls.name = name
         return cls

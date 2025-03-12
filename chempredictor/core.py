@@ -50,10 +50,10 @@ class ChemPredictor:
             self.config = self._load_config(config_path, config_dict)
             self._setup_logging()
             self.logger = logging.getLogger(__name__)
-            self.logger.info("初始化ChemPredictor")
+            self.logger.info("Initializing ChemPredictor")
             self.pipeline = self._build_pipeline()
         except Exception as e:
-            raise ConfigError(f"初始化失败: {str(e)}") from e
+            raise ConfigError(f"Initialization failed: {str(e)}") from e
             
     def _load_config(
         self, 
@@ -62,7 +62,7 @@ class ChemPredictor:
     ) -> Dict[str, Any]:
         """加载配置"""
         if config_path and config_dict:
-            raise ConfigError("只能提供config_path或config_dict中的一个")
+            raise ConfigError("Can only provide either config_path or config_dict")
             
         if config_path:
             return self._load_config_from_file(config_path)
@@ -77,7 +77,7 @@ class ChemPredictor:
             with open(config_path, 'r', encoding='utf-8') as f:
                 return yaml.safe_load(f)
         except Exception as e:
-            raise ConfigError(f"无法加载配置文件 {config_path}: {str(e)}") from e
+            raise ConfigError(f"Failed to load config file {config_path}: {str(e)}") from e
             
     def _load_default_config(self) -> Dict[str, Any]:
         """加载默认配置"""
@@ -96,16 +96,16 @@ class ChemPredictor:
         try:
             pipeline_config = self.config.get('pipeline', {})
             if not isinstance(pipeline_config, dict):
-                raise ValueError("pipeline配置必须是字典类型")
+                raise ValueError("Pipeline configuration must be a dictionary")
             
             steps = pipeline_config.get('steps', {})
             if not isinstance(steps, dict):
-                raise ValueError("pipeline.steps配置必须是字典类型")
+                raise ValueError("Pipeline.steps configuration must be a dictionary")
             
             # 确保配置格式正确并扁平化
             for step_name, step_config in steps.items():
                 if not isinstance(step_config, dict):
-                    raise ValueError(f"步骤'{step_name}'的配置必须是字典类型")
+                    raise ValueError(f"Configuration for step '{step_name}' must be a dictionary")
                 
                 # 扁平化数据加载配置
                 if step_name == 'data_loading':
@@ -114,14 +114,14 @@ class ChemPredictor:
                     if file_config or loader_config:
                         # 合并file_config和loader_config
                         steps[step_name] = {**file_config, **loader_config}
-                        self.logger.info(f"扁平化后的数据加载配置: {steps[step_name]}")
+                        self.logger.info(f"Flattened data loading configuration: {steps[step_name]}")
                     else:
                         # 如果没有嵌套结构，保持原样
-                        self.logger.info(f"使用原始数据加载配置: {step_config}")
+                        self.logger.info(f"Using original data loading configuration: {step_config}")
             
             return build_pipeline(pipeline_config)
         except Exception as e:
-            raise ModelError(f"构建pipeline失败: {str(e)}") from e
+            raise ModelError(f"Failed to build pipeline: {str(e)}") from e
             
     def train(self, data_path: str) -> None:
         """
@@ -134,11 +134,11 @@ class ChemPredictor:
             ModelError: 训练过程中出现错误
         """
         try:
-            self.logger.info(f"开始训练模型，使用数据: {data_path}")
+            self.logger.info(f"Starting model training with data: {data_path}")
             self.pipeline.fit(data_path)
             self._save_model_if_configured()
         except Exception as e:
-            raise ModelError(f"训练失败: {str(e)}") from e
+            raise ModelError(f"Training failed: {str(e)}") from e
             
     def _save_model_if_configured(self) -> None:
         """如果配置中指定了保存模型，则保存"""
@@ -147,7 +147,7 @@ class ChemPredictor:
             model_path.mkdir(parents=True, exist_ok=True)
             save_path = model_path / 'model.pkl'
             self.pipeline.save(str(save_path))
-            self.logger.info(f"模型已保存到: {save_path}")
+            self.logger.info(f"Model saved to: {save_path}")
     
     def predict(self, data: Union[str, Dict[str, Any]]) -> Dict[str, Any]:
         """
@@ -159,7 +159,7 @@ class ChemPredictor:
         返回:
             包含预测结果的字典
         """
-        self.logger.info("开始预测")
+        self.logger.info("Starting prediction")
         predictions = self.pipeline.predict(data)
         
         # 如果配置中指定了保存预测结果
@@ -174,7 +174,7 @@ class ChemPredictor:
             with open(output_file, 'w', encoding='utf-8') as f:
                 json.dump(predictions, f, indent=2)
             
-            self.logger.info(f"预测结果已保存到: {output_file}")
+            self.logger.info(f"Predictions saved to: {output_file}")
         
         return predictions
     
@@ -188,7 +188,7 @@ class ChemPredictor:
         返回:
             包含评估指标的字典
         """
-        self.logger.info(f"开始评估模型，使用数据: {data_path}")
+        self.logger.info(f"Starting model evaluation with data: {data_path}")
         return self.pipeline.evaluate(data_path)
     
     def save(self, path: str) -> None:
@@ -198,7 +198,7 @@ class ChemPredictor:
         参数:
             path: 保存路径
         """
-        self.logger.info(f"保存模型到: {path}")
+        self.logger.info(f"Saving model to: {path}")
         self.pipeline.save(path)
     
     def load(self, path: str) -> None:
@@ -208,5 +208,5 @@ class ChemPredictor:
         参数:
             path: 模型路径
         """
-        self.logger.info(f"从{path}加载模型")
+        self.logger.info(f"Loading model from: {path}")
         self.pipeline.load(path) 

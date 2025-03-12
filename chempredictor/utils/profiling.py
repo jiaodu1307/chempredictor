@@ -17,7 +17,7 @@ try:
     from memory_profiler import profile as memory_profile
     MEMORY_PROFILER_AVAILABLE = True
 except ImportError:
-    logger.warning("memory_profiler未安装，内存分析功能将被禁用")
+    logger.warning("Memory profiler not installed, memory profiling will be disabled")
     MEMORY_PROFILER_AVAILABLE = False
     
     def memory_profile(func):
@@ -38,7 +38,7 @@ class Timer:
     def __exit__(self, *args):
         self.end_time = time.perf_counter()
         duration = self.end_time - self.start_time
-        logger.info(f"{self.name} 执行时间: {duration:.4f} 秒")
+        logger.info(f"{self.name} execution time: {duration:.4f} seconds")
         
 def profile_memory(func: Callable) -> Callable:
     """
@@ -71,7 +71,7 @@ def profile_section(name: str, profile_memory: bool = False):
         name: 分析区块名称
         profile_memory: 是否进行内存分析（需要安装memory_profiler）
     """
-    logger.info(f"开始执行 {name}")
+    logger.info(f"Starting execution of {name}")
     start_time = time.perf_counter()
     start_memory = profile_gpu_memory() if profile_memory and MEMORY_PROFILER_AVAILABLE else None
     
@@ -80,7 +80,7 @@ def profile_section(name: str, profile_memory: bool = False):
     finally:
         end_time = time.perf_counter()
         duration = end_time - start_time
-        logger.info(f"{name} 执行时间: {duration:.4f} 秒")
+        logger.info(f"{name} execution time: {duration:.4f} seconds")
         
         if profile_memory and MEMORY_PROFILER_AVAILABLE and start_memory:
             end_memory = profile_gpu_memory()
@@ -88,7 +88,7 @@ def profile_section(name: str, profile_memory: bool = False):
                 k: end_memory[k] - start_memory[k]
                 for k in start_memory
             }
-            logger.info(f"{name} GPU内存变化: {memory_diff}")
+            logger.info(f"{name} GPU memory change: {memory_diff}")
             
 def log_performance(func: Callable) -> Callable:
     """性能日志装饰器"""
